@@ -1,0 +1,237 @@
+QUERY PER PROSES DFD LEVEL 1
+-- ============================================================
+-- 3. QUERY PER PROSES DFD LEVEL 1
+-- ============================================================
+ 
+-- ============================================================
+-- P1: REGISTRASI & LOGIN
+-- ============================================================
+ 
+-- P1.1 INSERT user baru (Registrasi)
+INSERT INTO users (user_id, name, email, password_hash)
+VALUES ('u-new', 'User Baru', 'userbaru@email.com', '$2b$10$hashBaru');
+ 
+-- P1.2 SELECT untuk verifikasi login (Login)
+SELECT user_id, name, email, password_hash, is_active
+FROM   users
+WHERE  email = 'adison@email.com'
+  AND  is_active = TRUE;
+ 
+-- P1.3 UPDATE status aktif (Logout / Deactivate)
+UPDATE users
+SET    is_active = FALSE,
+       updated_at = NOW()
+WHERE  user_id = 'u-009';
+ 
+-- ============================================================
+-- P2: KELOLA PROFIL PRIBADI
+-- ============================================================
+ 
+-- P2.1 INSERT profil baru
+INSERT INTO profiles (profile_id, user_id, age, weight_kg, height_cm, gender, goal)
+VALUES ('p-new', 'u-new', 22, 60.0, 168.0, 'male', 'healthy');
+ 
+-- P2.2 SELECT profil pengguna
+SELECT p.*, u.name, u.email
+FROM   profiles p
+JOIN   users u ON p.user_id = u.user_id
+WHERE  p.user_id = 'u-001';
+ 
+-- P2.3 UPDATE profil (edit berat badan dan tujuan)
+UPDATE profiles
+SET    weight_kg = 67.5,
+       goal = 'maintain',
+       updated_at = NOW()
+WHERE  user_id = 'u-001';
+ 
+-- ============================================================
+-- P3: GENERATE REKOMENDASI MAKANAN
+-- ============================================================
+ 
+-- P3.1 SELECT semua makanan dari database (sumber rekomendasi)
+SELECT food_id, name, calories, protein_g, carbs_g, fat_g,
+       price_estimate, category
+FROM   foods
+ORDER  BY calories ASC;
+ 
+-- P3.2 INSERT rekomendasi baru untuk user
+INSERT INTO recommendations (rec_id, user_id, total_calories)
+VALUES ('rec-new', 'u-001', 1900.0);
+ 
+-- P3.3 INSERT makanan ke dalam rekomendasi (bridge)
+INSERT INTO rec_foods (rec_food_id, rec_id, food_id) VALUES
+  ('rf-new-1', 'rec-new', 'f-001'),
+  ('rf-new-2', 'rec-new', 'f-002'),
+  ('rf-new-3', 'rec-new', 'f-003');
+ 
+-- P3.4 SELECT detail rekomendasi lengkap untuk user tertentu
+SELECT r.rec_id, r.generated_at, r.total_calories,
+       f.name, f.calories, f.protein_g, f.carbs_g, f.fat_g,
+       f.price_estimate, rec.recipe_id
+FROM   recommendations r
+JOIN   rec_foods rf ON r.rec_id = rf.rec_id
+JOIN   foods f ON rf.food_id = f.food_id
+LEFT JOIN recipes rec ON f.food_id = rec.food_id
+WHERE  r.user_id = 'u-001'
+ORDER  BY r.generated_at DESC
+LIMIT  1;
+ 
+-- ============================================================
+-- P4: SESUAIKAN BUDGET & PREFERENSI
+-- ============================================================
+ 
+-- P4.1 INSERT preferensi pengguna
+INSERT INTO preferences (pref_id, user_id, diet_type, daily_budget, currency)
+VALUES ('pref-new', 'u-new', 'balanced', 50000.0, 'IDR');
+ 
+-- P4.2 UPDATE preferensi (ganti diet type dan budget)
+UPDATE preferences
+SET    diet_type = 'vegetarian',
+       daily_budget = 45000.0
+WHERE  user_id = 'u-006';
+ 
+-- P4.3 SELECT makanan sesuai budget harian
+-- (filter harga makanan di bawah 1/3 budget harian = makan 3x sehari)
+SELECT f.food_id, f.name, f.calories, f.price_estimate, f.category
+FROM   foods f
+WHERE  f.price_estimate <= (
+    SELECT daily_budget / 3
+    FROM   preferences
+    WHERE  user_id = 'u-003'
+)
+ORDER  BY f.calories DESC;
+ 
+-- P4.4 SELECT makanan sesuai preferensi vegetarian
+SELECT food_id, name, calories, protein_g, price_estimate
+FROM   foods
+WHERE  category IN ('sayuran', 'buah', 'karbohidrat', 'minuman')
+ORDER  BY calories ASC;
+ 
+-- ============================================================
+-- P5: SIMPAN RIWAYAT MAKANAN
+-- ============================================================
+ 
+-- P5.1 INSERT riwayat konsumsi makanan
+INSERT INTO food_history (history_id, user_id, food_id, consumed_at, qty_gram)
+VALUES ('fh-new', 'u-001', 'f-003', CURRENT_DATE, 100.0);
+ 
+-- P5.2 SELECT riwayat makanan user (7 hari terakhir)
+SELECT fh.history_id, fh.consumed_at, fh.qty_gram,
+       f.name, f.calories,
+       (f.calories * fh.qty_gram / 100) AS total_kalori_konsumsi
+FROM   food_history fh
+JOIN   foods f ON fh.food_id = f.food_id
+WHERE  fh.user_id = 'u-001'
+  AND  fh.consumed_at >= CURRENT_DATE - INTERVAL '7 days'
+ORDER  BY fh.consumed_at DESC;
+ 
+-- P5.3 SELECT cek duplikat (apakah makanan sudah dicatat hari ini)
+SELECT COUNT(*) AS sudah_ada
+FROM   food_history
+WHERE  user_id = 'u-001'
+  AND  food_id = 'f-001'
+  AND  consumed_at = CURRENT_DATE;
+ 
+-- P5.4 SELECT total kalori harian user
+SELECT fh.consumed_at,
+       SUM(f.calories * fh.qty_gram / 100) AS total_kalori_harian
+FROM   food_history fh
+JOIN   foods f ON fh.food_id = f.food_id
+WHERE  fh.user_id = 'u-001'
+GROUP  BY fh.consumed_at
+ORDER  BY fh.consumed_at DESC;
+ 
+-- ============================================================
+-- P6: TAMPILKAN ARTIKEL SEHAT
+-- ============================================================
+ 
+-- P6.1 Buat tabel articles (tambahan, tidak ada di ERD awal, sesuai SKPL FR-10)
+CREATE TABLE IF NOT EXISTS articles (
+    article_id   VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    title        VARCHAR(200) NOT NULL,
+    content      TEXT         NOT NULL,
+    category     VARCHAR(50)  NOT NULL,
+    published_at TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+ 
+-- P6.2 INSERT artikel dummy (10 artikel)
+INSERT INTO articles (article_id, title, content, category, published_at) VALUES
+  ('a-001', '5 Manfaat Sarapan Sehat di Pagi Hari', 'Sarapan memberikan energi awal untuk aktivitas harian...', 'nutrisi',     '2025-02-01 08:00:00'),
+  ('a-002', 'Tips Menjaga Kalori Harian',            'Menghitung kalori harian bisa dilakukan dengan...', 'diet',          '2025-02-05 09:00:00'),
+  ('a-003', 'Protein: Fungsi dan Sumber Terbaik',    'Protein dibutuhkan untuk membangun dan memperbaiki otot...', 'nutrisi', '2025-02-10 10:00:00'),
+  ('a-004', 'Cara Bulking Sehat Tanpa Lemak Berlebih','Bulking yang benar bukan hanya makan banyak, namun...', 'olahraga',   '2025-02-12 08:30:00'),
+  ('a-005', 'Menu Vegetarian Tinggi Protein',        'Sumber protein untuk vegetarian di antaranya adalah...', 'nutrisi',    '2025-02-15 07:00:00'),
+  ('a-006', 'Pentingnya Minum Air Putih 8 Gelas',   'Tubuh manusia terdiri dari 60% air dan membutuhkan...', 'kesehatan',   '2025-02-18 09:00:00'),
+  ('a-007', 'Olahraga Ringan untuk Pemula',          'Memulai olahraga tidak harus langsung berat...', 'olahraga',         '2025-02-20 08:00:00'),
+  ('a-008', 'Makanan yang Baik untuk Diet',          'Pilih makanan rendah kalori namun tinggi serat seperti...', 'diet',     '2025-02-22 10:00:00'),
+  ('a-009', 'Kebiasaan Makan Malam yang Sehat',      'Makan malam sebaiknya tidak lebih dari pukul 19.00...', 'nutrisi',    '2025-02-25 07:30:00'),
+  ('a-010', 'Gula dan Dampaknya pada Tubuh',         'Konsumsi gula berlebihan dapat menyebabkan...', 'kesehatan',          '2025-02-28 09:00:00');
+ 
+-- P6.3 SELECT daftar artikel terbaru
+SELECT article_id, title, category, published_at
+FROM   articles
+ORDER  BY published_at DESC
+LIMIT  10;
+ 
+-- P6.4 SELECT artikel berdasarkan ID
+SELECT * FROM articles WHERE article_id = 'a-001';
+ 
+-- P6.5 SELECT artikel berdasarkan kategori
+SELECT article_id, title, published_at
+FROM   articles
+WHERE  category = 'nutrisi'
+ORDER  BY published_at DESC;
+ 
+-- ============================================================
+-- P7: KIRIM NOTIFIKASI HARIAN
+-- ============================================================
+ 
+-- P7.1 INSERT jadwal notifikasi baru
+INSERT INTO notifications (notif_id, user_id, type, message, scheduled_at, created_date)
+VALUES ('n-new', 'u-001', 'reminder', 'Yuk cek rekomendasi makan siangmu!', '11:30:00', CURRENT_DATE);
+ 
+-- P7.2 SELECT notifikasi yang belum terkirim hari ini (untuk FCM trigger)
+SELECT n.notif_id, n.user_id, n.type, n.message, n.scheduled_at,
+       u.email
+FROM   notifications n
+JOIN   users u ON n.user_id = u.user_id
+WHERE  n.is_sent = FALSE
+  AND  n.created_date = CURRENT_DATE
+  AND  u.is_active = TRUE
+ORDER  BY n.scheduled_at ASC;
+ 
+-- P7.3 UPDATE status notifikasi setelah terkirim
+UPDATE notifications
+SET    is_sent = TRUE
+WHERE  notif_id = 'n-004';
+ 
+-- P7.4 SELECT statistik notifikasi per user
+SELECT u.name,
+       COUNT(*) FILTER (WHERE n.is_sent = TRUE)  AS terkirim,
+       COUNT(*) FILTER (WHERE n.is_sent = FALSE) AS pending
+FROM   notifications n
+JOIN   users u ON n.user_id = u.user_id
+GROUP  BY u.user_id, u.name
+ORDER  BY terkirim DESC;
+ 
+-- ============================================================
+-- BONUS: QUERY AGREGASI / DASHBOARD
+-- ============================================================
+ 
+-- Total kalori yang dikonsumsi user per hari (semua user)
+SELECT u.name,
+       fh.consumed_at,
+       ROUND(SUM(f.calories * fh.qty_gram / 100)::numeric, 1) AS total_kalori
+FROM   food_history fh
+JOIN   users u ON fh.user_id = u.user_id
+JOIN   foods f ON fh.food_id = f.food_id
+GROUP  BY u.name, fh.consumed_at
+ORDER  BY fh.consumed_at DESC, total_kalori DESC;
+ 
+-- Top 5 makanan paling sering dikonsumsi
+SELECT f.name, COUNT(*) AS frekuensi
+FROM   food_history fh
+JOIN   foods f ON fh.food_id = f.food_id
+GROUP  BY f.name
+ORDER  BY frekuensi DESC
+LIMIT  5;

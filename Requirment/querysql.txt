@@ -1,0 +1,80 @@
+CREATE TABLE IF NOT EXISTS users (
+    user_id       VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    name          VARCHAR(100) NOT NULL,
+    email         VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS profiles (
+    profile_id  VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    user_id     VARCHAR(36)  NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    age         INT          NOT NULL CHECK (age > 0 AND age < 120),
+    weight_kg   FLOAT        NOT NULL CHECK (weight_kg > 0),
+    height_cm   FLOAT        NOT NULL CHECK (height_cm > 0),
+    gender      VARCHAR(10)  NOT NULL CHECK (gender IN ('male','female','other')),
+    goal        VARCHAR(50)  NOT NULL CHECK (goal IN ('diet','bulking','maintain','healthy')),
+    updated_at  TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS preferences (
+    pref_id      VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    user_id      VARCHAR(36)  NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    diet_type    VARCHAR(50)  NOT NULL DEFAULT 'balanced',
+    daily_budget FLOAT        NOT NULL DEFAULT 50000,
+    currency     VARCHAR(5)   NOT NULL DEFAULT 'IDR',
+    created_at   TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS foods (
+    food_id        VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    name           VARCHAR(150) NOT NULL,
+    calories       FLOAT        NOT NULL,
+    protein_g      FLOAT        NOT NULL DEFAULT 0,
+    carbs_g        FLOAT        NOT NULL DEFAULT 0,
+    fat_g          FLOAT        NOT NULL DEFAULT 0,
+    price_estimate FLOAT        NOT NULL DEFAULT 0,
+    category       VARCHAR(50)  NOT NULL,
+    source         VARCHAR(100) NOT NULL DEFAULT 'local'
+);
+
+CREATE TABLE IF NOT EXISTS recipes (
+    recipe_id     VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    food_id       VARCHAR(36) NOT NULL REFERENCES foods(food_id) ON DELETE CASCADE,
+    ingredients   TEXT        NOT NULL,
+    steps         TEXT        NOT NULL,
+    prep_time_min INT         NOT NULL DEFAULT 15
+);
+
+CREATE TABLE IF NOT EXISTS recommendations (
+    rec_id         VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    user_id        VARCHAR(36) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    total_calories FLOAT       NOT NULL,
+    generated_at   TIMESTAMP   NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS rec_foods (
+    rec_food_id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    rec_id      VARCHAR(36) NOT NULL REFERENCES recommendations(rec_id) ON DELETE CASCADE,
+    food_id     VARCHAR(36) NOT NULL REFERENCES foods(food_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS food_history (
+    history_id  VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    user_id     VARCHAR(36) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    food_id     VARCHAR(36) NOT NULL REFERENCES foods(food_id) ON DELETE CASCADE,
+    consumed_at DATE        NOT NULL DEFAULT CURRENT_DATE,
+    qty_gram    FLOAT       NOT NULL DEFAULT 100
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    notif_id     VARCHAR(36)  PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    user_id      VARCHAR(36)  NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    type         VARCHAR(30)  NOT NULL CHECK (type IN ('reminder','motivation')),
+    message      VARCHAR(255) NOT NULL,
+    scheduled_at TIME         NOT NULL,
+    is_sent      BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_date DATE         NOT NULL DEFAULT CURRENT_DATE
+);
